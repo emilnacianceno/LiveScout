@@ -1,0 +1,19 @@
+body { font-family: system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #1b1f24; }
+main { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+nav { display: flex; gap: .5rem; margin: 1rem 0; }
+.tab.on { background: #1b1f24; color: #fff; }
+.controls { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+input:not([type]), input[type='text'], input[type='number'], select { padding: .45rem; }
+input[type='number'] { width: 4.5rem; }
+.grow { flex: 1; min-width: 240px; }
+button { padding: .45rem .9rem; cursor: pointer; }
+ul { list-style: none; padding: 0; }
+li { padding: .55rem 0; border-bottom: 1px solid #dde1e6; word-break: break-all; display: flex; gap: .6rem; align-items: baseline; flex-wrap: wrap; }
+li.row { align-items: center; }
+small { color: #656d76; }
+.live { background: #d92d20; color: #fff; font-size: .7rem; padding: .1rem .4rem; border-radius: 4px; }
+.pill { font-size: .7rem; padding: .1rem .45rem; border-radius: 10px; background: #dde1e6; }
+.pill.done { background: #c8f0d2; } .pill.failed { background: #f9c9c4; }
+.error { color: #b42318; }
+pre { background: #1b1f24; color: #d0d7de; padding: .75rem; overflow: auto; }

@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.env
+.env.local
+python/.venv/
+python/profile/
+__pycache__/
+data/*
+!data/.gitkeep
+
+# Misc
+*.log
+*.pyc
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

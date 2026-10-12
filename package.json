@@ -1,0 +1,24 @@
+{
+  "name": "face",
+  "private": true,
+  "type": "module",
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "setup": "bun scripts/setup.ts",
+    "dev": "concurrently -k -n python,backend,frontend -c yellow,green,cyan \"bun run dev:python\" \"bun run dev:backend\" \"bun run dev:frontend\"",
+    "dev:python": "bun scripts/py.ts server.py",
+    "dev:backend": "cd backend && bun run dev",
+    "dev:frontend": "cd frontend && bun run dev",
+    "db:migrate": "bun scripts/db-migrate.ts",
+    "login": "bun scripts/py.ts fb_live_scraper.py --login",
+    "scrape": "bun scripts/py.ts fb_live_scraper.py",
+    "typecheck": "cd backend && bun run typecheck && cd ../frontend && bun run build",
+    "build": "cd frontend && bun run build"
+  },
+  "dependencies": {
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
