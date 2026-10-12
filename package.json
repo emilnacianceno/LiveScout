@@ -13,6 +13,10 @@
     "login": "bun scripts/py.ts fb_live_scraper.py --login",
     "scrape": "bun scripts/py.ts fb_live_scraper.py",
     "typecheck": "cd backend && bun run typecheck && cd ../frontend && bun run build",
+    "test": "bun run test:backend && bun run test:py",
+    "test:backend": "cd backend && bun test",
+    "test:db": "cd backend && RUN_DB_TESTS=1 bun test",
+    "test:py": "bun scripts/py.ts -m pytest -q tests",
     "build": "cd frontend && bun run build"
   },
   "dependencies": {
