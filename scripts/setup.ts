@@ -15,7 +15,7 @@ async function run(cmd: string[], cwd = root) {
 
 await run(['bun', 'install']);
 if (!existsSync(venvPy)) await run([win ? 'python' : 'python3', '-m', 'venv', '.venv'], pyDir);
-await run([venvPy, '-m', 'pip', 'install', '-r', 'requirements.txt'], pyDir);
+await run([venvPy, '-m', 'pip', 'install', '-r', 'requirements-dev.txt'], pyDir);
 await run([venvPy, '-m', 'playwright', 'install', 'chromium'], pyDir);
 
 if (!existsSync(resolve(root, '.env'))) {
