@@ -83,7 +83,10 @@ def main():
             ctx = p.chromium.launch_persistent_context(str(PROFILE_DIR), headless=False)
             (ctx.pages[0] if ctx.pages else ctx.new_page()).goto("https://www.facebook.com/")
             input("Log in in the browser window, then press Enter here to save the session...")
-            ctx.close()
+            try:
+                ctx.close()
+            except Exception:  # window already closed by the user; the profile is still saved
+                pass
         return
     if not args.group_url:
         sys.exit("Provide a group URL or set GROUP_URL.")

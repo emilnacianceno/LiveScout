@@ -10,9 +10,38 @@ type Group = {
   lastScrapedAt: string | null;
   livestreamCount?: number;
 };
-type Stream = { id: string; url: string; isLive: boolean; firstSeenAt: string; groupId: string; groupName: string };
+type Stream = { id: string; videoId: string; url: string; isLive: boolean; firstSeenAt: string; groupId: string; groupName: string };
 type Progress = { running: boolean; currentGroup: string | null; queued: number; log: string[] };
 type Run = { id: string; groupName: string; status: string; foundCount: number; newCount: number; error: string | null; startedAt: string };
+
+type StreamTab = 'live' | 'reels' | 'all';
+const isReel = (s: Stream) => s.url.includes('/reel/');
+
+// The same video can be posted in several groups; keep one entry per video and merge the group names.
+function dedupe(list: Stream[]): Stream[] {
+  const byVideo = new Map<string, Stream>();
+  for (const s of list) {
+    const seen = byVideo.get(s.videoId);
+    if (!seen) {
+      byVideo.set(s.videoId, { ...s });
+      continue;
+    }
+    if (!seen.groupName.split(', ').includes(s.groupName)) seen.groupName += `, ${s.groupName}`;
+    seen.isLive = seen.isLive || s.isLive;
+    if (s.firstSeenAt < seen.firstSeenAt) seen.firstSeenAt = s.firstSeenAt;
+  }
+  return [...byVideo.values()];
+}
+
+function timeAgo(iso: string): string {
+  const sec = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (sec < 60) return 'just now';
+  const units: [number, string][] = [[86400, 'd'], [3600, 'h'], [60, 'm']];
+  for (const [size, label] of units) if (sec >= size) return `${Math.floor(sec / size)}${label} ago`;
+  return '';
+}
+
+const shortUrl = (url: string) => url.replace(/^https?:\/\/(www\.)?facebook\.com/, '');
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -25,23 +54,24 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export default function App() {
-  const [tab, setTab] = useState<'streams' | 'groups'>('streams');
+  const [tab, setTab] = useState<StreamTab | 'groups'>('live');
   const [groups, setGroups] = useState<Group[]>([]);
   const [streams, setStreams] = useState<Stream[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [filterGroup, setFilterGroup] = useState('');
-  const [liveOnly, setLiveOnly] = useState(false);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState('');
+  const [query, setQuery] = useState('');
 
   const loadGroups = useCallback(async () => setGroups(await api('/groups')), []);
   const loadRuns = useCallback(async () => setRuns(await api('/scrape/runs')), []);
   const loadStreams = useCallback(async () => {
     const q = new URLSearchParams();
     if (filterGroup) q.set('groupId', filterGroup);
-    if (liveOnly) q.set('liveOnly', 'true');
     setStreams(await api(`/livestreams?${q}`));
-  }, [filterGroup, liveOnly]);
+  }, [filterGroup]);
 
   const guard = (fn: () => Promise<unknown>) => async () => {
     setError('');
@@ -73,27 +103,89 @@ export default function App() {
       setProgress(await api<Progress>('/scrape/status'));
     })();
 
+  const copyAll = async () => {
+    try {
+      await navigator.clipboard.writeText(shown.map((s) => s.url).join('\n'));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError('Could not copy to clipboard');
+    }
+  };
+
+  const unique = dedupe(streams);
+  const needle = query.trim().toLowerCase();
+  const shown = unique
+    .filter((s) => (tab === 'live' ? s.isLive : tab === 'reels' ? isReel(s) : true))
+    .filter((s) => !needle || s.url.toLowerCase().includes(needle) || s.groupName.toLowerCase().includes(needle));
+
+  const copyOne = async (s: Stream) => {
+    try {
+      await navigator.clipboard.writeText(s.url);
+      setCopiedId(s.id);
+      setTimeout(() => setCopiedId(''), 1200);
+    } catch {
+      setError('Could not copy to clipboard');
+    }
+  };
+
   return (
     <main>
       <header>
-        <h1>Group Livestreams</h1>
-        <button onClick={() => scrape()} disabled={progress?.running}>
+        <div>
+          <h1>LiveScout</h1>
+          <p className="sub">Videos, reels and lives collected from your Facebook groups</p>
+        </div>
+        <button className="primary" onClick={() => scrape()} disabled={progress?.running}>
           {progress?.running ? `Scraping ${progress.currentGroup ?? ''}… (${progress.queued} left)` : 'Scrape all active groups'}
         </button>
       </header>
       <nav>
-        <button className={tab === 'streams' ? 'tab on' : 'tab'} onClick={() => setTab('streams')}>
-          Livestreams
+        <button className={tab === 'live' ? 'tab on' : 'tab'} onClick={() => setTab('live')}>
+          Live ({unique.filter((s) => s.isLive).length})
+        </button>
+        <button className={tab === 'reels' ? 'tab on' : 'tab'} onClick={() => setTab('reels')}>
+          Reels ({unique.filter(isReel).length})
+        </button>
+        <button className={tab === 'all' ? 'tab on' : 'tab'} onClick={() => setTab('all')}>
+          All ({unique.length})
         </button>
         <button className={tab === 'groups' ? 'tab on' : 'tab'} onClick={() => setTab('groups')}>
           Groups ({groups.length})
         </button>
       </nav>
       {error && <p className="error">{error}</p>}
-      {progress?.running && progress.log.length > 0 && <pre>{progress.log.join('\n')}</pre>}
-
-      {tab === 'streams' ? (
+      {tab !== 'groups' ? (
         <>
+          <section className="activity">
+            <div className="activity-head">
+              <strong>Activity</strong>
+              {progress?.running ? (
+                <span className="running">
+                  <span className="dot" /> Scraping {progress.currentGroup ?? '…'} · {progress.queued} queued
+                </span>
+              ) : (
+                <span className="count">{runs[0] ? `Last run ${timeAgo(runs[0].startedAt)}` : 'Idle'}</span>
+              )}
+            </div>
+            {progress?.running && progress.log.length > 0 && <pre>{progress.log.slice(-6).join('\n')}</pre>}
+            {runs.length === 0 ? (
+              <small>No scrapes yet.</small>
+            ) : (
+              <ul>
+                {runs.slice(0, 5).map((r) => (
+                  <li key={r.id}>
+                    <span className={`pill ${r.status}`}>{r.status}</span>
+                    <span className="grow">
+                      {r.groupName} — {r.foundCount} found, <strong>{r.newCount} new</strong>
+                      {r.error && <small className="error"> {r.error}</small>}
+                    </span>
+                    <small title={new Date(r.startedAt).toLocaleString()}>{timeAgo(r.startedAt)}</small>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
           <div className="controls">
             <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)}>
               <option value="">All groups</option>
@@ -103,34 +195,45 @@ export default function App() {
                 </option>
               ))}
             </select>
-            <label>
-              <input type="checkbox" checked={liveOnly} onChange={(e) => setLiveOnly(e.target.checked)} /> Live only
-            </label>
-            <span>{streams.length} URLs</span>
+            <input
+              type="search"
+              className="grow"
+              placeholder="Search URL or group…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <span className="count">{shown.length} URLs</span>
+            <button className="primary" onClick={copyAll} disabled={!shown.length}>
+              {copied ? 'Copied!' : 'Copy all'}
+            </button>
           </div>
-          <ul>
-            {streams.map((s) => (
-              <li key={s.id}>
-                {s.isLive && <span className="live">LIVE</span>}
-                <a href={s.url} target="_blank" rel="noreferrer">
-                  {s.url}
-                </a>
-                <small>
-                  {s.groupName} · {new Date(s.firstSeenAt).toLocaleString()}
-                </small>
-              </li>
-            ))}
-          </ul>
-          <h3>Recent runs</h3>
-          <ul>
-            {runs.map((r) => (
-              <li key={r.id}>
-                <span className={`pill ${r.status}`}>{r.status}</span> {r.groupName} — {r.foundCount} found, {r.newCount} new
-                {r.error && <small className="error"> {r.error}</small>}
-                <small>{new Date(r.startedAt).toLocaleString()}</small>
-              </li>
-            ))}
-          </ul>
+          {shown.length === 0 ? (
+            <div className="empty">
+              <strong>Nothing here yet</strong>
+              <p>
+                {streams.length === 0
+                  ? 'Add a group in the Groups tab, then press "Scrape all active groups".'
+                  : 'No results match this tab or search.'}
+              </p>
+            </div>
+          ) : (
+            <ul className="cards">
+              {shown.map((s) => (
+                <li key={s.id}>
+                  {s.isLive ? <span className="badge live">LIVE</span> : <span className="badge">{isReel(s) ? 'REEL' : 'VIDEO'}</span>}
+                  <div className="grow">
+                    <a href={s.url} target="_blank" rel="noreferrer">
+                      {shortUrl(s.url)}
+                    </a>
+                    <small>
+                      {s.groupName} · <span title={new Date(s.firstSeenAt).toLocaleString()}>{timeAgo(s.firstSeenAt)}</span>
+                    </small>
+                  </div>
+                  <button onClick={() => copyOne(s)}>{copiedId === s.id ? 'Copied!' : 'Copy'}</button>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       ) : (
         <GroupsTab groups={groups} reload={loadGroups} scrape={scrape} busy={!!progress?.running} onError={setError} />
